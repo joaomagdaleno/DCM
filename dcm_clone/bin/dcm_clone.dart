@@ -1,33 +1,53 @@
 import 'package:args/args.dart';
 import 'dart:io';
 import 'package:dcm_clone/dcm_clone.dart';
+import 'package:dcm_clone/metrics_analyzer.dart';
 
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addCommand('analyze', ArgParser()
       ..addOption('directory', abbr: 'd', help: 'The directory to analyze.')
       ..addOption('reporter', abbr: 'r', help: 'The format to output results in.', allowed: ['console', 'json'], defaultsTo: 'console')
+    )
+    ..addCommand('metrics', ArgParser()
+      ..addOption('directory', abbr: 'd', help: 'The directory to calculate metrics for.')
     );
 
   try {
     final results = parser.parse(arguments);
+    final command = results.command;
 
-    if (results.command?.name == 'analyze') {
-      final commandResults = results.command!;
-      final directoryPath = commandResults['directory'] as String?;
+    if (command?.name == 'analyze') {
+      final directoryPath = command!['directory'] as String?;
       if (directoryPath == null) {
         print('Please provide a directory to analyze with the --directory option.');
         exit(1);
       }
-      final reporter = commandResults['reporter'] as String;
+      final reporter = command['reporter'] as String;
       final absoluteDirectoryPath = Directory(directoryPath).absolute.path;
       await analyzeDirectory(absoluteDirectoryPath, reporter);
+    } else if (command?.name == 'metrics') {
+      final directoryPath = command!['directory'] as String?;
+      if (directoryPath == null) {
+        print('Please provide a directory to calculate metrics for with the --directory option.');
+        exit(1);
+      }
+      final absoluteDirectoryPath = Directory(directoryPath).absolute.path;
+      await calculateMetrics(absoluteDirectoryPath);
     } else {
-      print('Usage: dcm_clone analyze --directory <path> [--reporter=console|json]');
+      printUsage(parser);
     }
   } on FormatException catch (e) {
     print(e.message);
-    print('Usage: dcm_clone analyze --directory <path>');
+    printUsage(parser);
     exit(1);
   }
+}
+
+void printUsage(ArgParser parser) {
+  print('Usage: dcm_clone <command> [options]');
+  print('\nCommands:');
+  print('  analyze    Analyze the project for lint issues.');
+  print('  metrics    Calculate code metrics for the project.');
+  print('\n${parser.usage}');
 }
