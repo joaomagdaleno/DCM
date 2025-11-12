@@ -1,5 +1,5 @@
-name: dcm_clone
-description: A sample command-line application.
+name: dqcm
+description: A Dart Quality Control Metrics tool.
 version: 1.0.0
 # repository: https://github.com/my_org/my_repo
 
@@ -11,6 +11,9 @@ dependencies:
   path: ^1.9.0
   analyzer: ^9.0.0
   args: ^2.7.0
+  yaml: ^3.1.3
+  flutter:
+    sdk: flutter
 
 dev_dependencies:
   lints: ^6.0.0

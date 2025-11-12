@@ -1,7 +1,8 @@
 import 'package:args/args.dart';
 import 'dart:io';
-import 'package:dcm_clone/dcm_clone.dart';
-import 'package:dcm_clone/metrics_analyzer.dart';
+import 'package:path/path.dart' as p;
+import 'package:dqcm/dqcm.dart';
+import 'package:dqcm/metrics_analyzer.dart';
 
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
@@ -24,16 +25,16 @@ Future<void> main(List<String> arguments) async {
         exit(1);
       }
       final reporter = command['reporter'] as String;
-      final absoluteDirectoryPath = Directory(directoryPath).absolute.path;
-      await analyzeDirectory(absoluteDirectoryPath, reporter);
+      final absolutePath = p.normalize(Directory(directoryPath).absolute.path);
+      await analyzeDirectory(absolutePath, reporter);
     } else if (command?.name == 'metrics') {
       final directoryPath = command!['directory'] as String?;
       if (directoryPath == null) {
         print('Please provide a directory to calculate metrics for with the --directory option.');
         exit(1);
       }
-      final absoluteDirectoryPath = Directory(directoryPath).absolute.path;
-      await calculateMetrics(absoluteDirectoryPath);
+      final absolutePath = p.normalize(Directory(directoryPath).absolute.path);
+      await calculateMetrics(absolutePath);
     } else {
       printUsage(parser);
     }
