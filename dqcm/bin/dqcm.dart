@@ -24,9 +24,17 @@ Future<void> main(List<String> arguments) async {
         print('Please provide a directory to analyze with the --directory option.');
         exit(1);
       }
-      final reporter = command['reporter'] as String;
+      final reporterType = command['reporter'] as String;
       final absolutePath = p.normalize(Directory(directoryPath).absolute.path);
-      await analyzeDirectory(absolutePath, reporter);
+
+      final issues = await analyzeDirectory(absolutePath);
+
+      final reporter = getReporter(reporterType);
+      reporter.report(issues);
+
+      if (issues.isNotEmpty) {
+        exit(1);
+      }
     } else if (command?.name == 'metrics') {
       final directoryPath = command!['directory'] as String?;
       if (directoryPath == null) {

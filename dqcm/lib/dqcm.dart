@@ -17,19 +17,18 @@ final _allRules = <Rule>[
   AvoidEmptySetStateRule(),
 ];
 
-Future<void> analyzeDirectory(String directoryPath, String reporterType) async {
+Future<Iterable<Issue>> analyzeDirectory(String directoryPath) async {
   final optionsFile = File(p.join(directoryPath, 'analysis_options.yaml'));
   final config = Config.fromAnalysisOptions(optionsFile);
 
   final enabledRules = _allRules.where((rule) => config.enabledRules.contains(rule.id)).toList();
 
-  if (reporterType == 'console') {
-    if (enabledRules.isEmpty) {
-      print('No rules enabled. Add rules to `dqcm:` section in your analysis_options.yaml');
-      return;
-    }
-    print('Enabled rules: ${enabledRules.map((r) => r.id).join(', ')}');
+  if (enabledRules.isEmpty) {
+    print('No rules enabled. Add rules to `dqcm:` section in your analysis_options.yaml');
+    return [];
   }
+
+  print('Enabled rules: ${enabledRules.map((r) => r.id).join(', ')}');
 
   final collection = AnalysisContextCollection(
     includedPaths: [directoryPath],
@@ -50,11 +49,10 @@ Future<void> analyzeDirectory(String directoryPath, String reporterType) async {
     }
   }
 
-  final reporter = _getReporter(reporterType);
-  reporter.report(issues);
+  return issues;
 }
 
-Reporter _getReporter(String type) {
+Reporter getReporter(String type) {
   if (type == 'json') {
     return JsonReporter();
   }
