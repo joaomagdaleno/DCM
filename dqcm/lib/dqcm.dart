@@ -6,6 +6,9 @@ import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:dqcm/src/config/config.dart';
 import 'package:dqcm/src/rules/flutter/avoid_empty_setstate.dart';
 import 'package:dqcm/src/rules/flutter/avoid_returning_widgets.dart';
+import 'package:dqcm/src/reporters/console_reporter.dart';
+import 'package:dqcm/src/reporters/json_reporter.dart';
+import 'package:dqcm/src/reporters/reporter.dart';
 import 'package:dqcm/src/rules/rule.dart';
 
 // Este será o registro para todas as regras disponíveis na ferramenta.
@@ -14,18 +17,19 @@ final _allRules = <Rule>[
   AvoidEmptySetStateRule(),
 ];
 
-Future<void> analyzeDirectory(String directoryPath, String reporter) async {
+Future<void> analyzeDirectory(String directoryPath, String reporterType) async {
   final optionsFile = File(p.join(directoryPath, 'analysis_options.yaml'));
   final config = Config.fromAnalysisOptions(optionsFile);
 
   final enabledRules = _allRules.where((rule) => config.enabledRules.contains(rule.id)).toList();
 
-  if (enabledRules.isEmpty) {
-    print('No rules enabled. Add rules to `dqcm:` section in your analysis_options.yaml');
-    return;
+  if (reporterType == 'console') {
+    if (enabledRules.isEmpty) {
+      print('No rules enabled. Add rules to `dqcm:` section in your analysis_options.yaml');
+      return;
+    }
+    print('Enabled rules: ${enabledRules.map((r) => r.id).join(', ')}');
   }
-
-  print('Enabled rules: ${enabledRules.map((r) => r.id).join(', ')}');
 
   final collection = AnalysisContextCollection(
     includedPaths: [directoryPath],
@@ -46,11 +50,13 @@ Future<void> analyzeDirectory(String directoryPath, String reporter) async {
     }
   }
 
-  // TODO: Implementar um Reporter adequado
-  if (issues.isEmpty) {
-    print('No issues found.');
-  } else {
-    print('Found ${issues.length} issues:');
-    issues.forEach(print);
+  final reporter = _getReporter(reporterType);
+  reporter.report(issues);
+}
+
+Reporter _getReporter(String type) {
+  if (type == 'json') {
+    return JsonReporter();
   }
+  return ConsoleReporter();
 }
