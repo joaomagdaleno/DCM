@@ -1,0 +1,6 @@
+include: package:lints/recommended.yaml
+
+dqcm:
+  rules:
+    - avoid-returning-widgets
+    - avoid-empty-setstate
