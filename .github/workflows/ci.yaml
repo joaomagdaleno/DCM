@@ -1,0 +1,134 @@
+name: Dart Quality Control Metrics CI
+
+on:
+  push:
+    branches:
+      - dev
+      - beta
+      - main
+  pull_request:
+    branches:
+      - dev
+
+# Reusable step definitions using YAML anchors
+x-workflow-steps:
+  - &checkout
+    name: Checkout code
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0  # SonarCloud requires full history
+
+  - &flutter-setup
+    name: Set up Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      channel: 'stable'
+
+  - &install-deps
+    name: Install dependencies
+    run: flutter pub get
+    working-directory: ./dqcm
+
+  - &analyze
+    name: Analyze project
+    run: dart run bin/dqcm.dart analyze --directory .
+    working-directory: ./dqcm
+
+  - &test-with-coverage
+    name: Run tests with coverage
+    run: flutter test --coverage
+    working-directory: ./dqcm
+
+  - &check-coverage
+    name: Check code coverage
+    uses: VeryGoodOpenSource/very_good_coverage@v2
+    with:
+      path: "./dqcm/coverage/lcov.info"
+      min_coverage: 80
+
+  - &trivy-install-and-run
+    name: 'Scan for vulnerabilities with Trivy'
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+      wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+      echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+      sudo apt-get update
+      sudo apt-get install -y trivy
+      trivy fs .
+
+  - &sonar-scan
+    name: SonarCloud Scan
+    uses: SonarSource/sonarqube-scan-action@v6
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: https://sonarcloud.io
+
+jobs:
+  dev:
+    if: github.ref == 'refs/heads/dev' || github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *test-with-coverage # Enabled coverage for Sonar analysis
+      - *trivy-install-and-run
+      - *sonar-scan
+      - name: Create pre-release tag
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION-dev.$GITHUB_RUN_NUMBER"
+          git tag $TAG
+          git push origin $TAG
+
+  beta:
+    if: github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *test-with-coverage
+      - *check-coverage # Enforce 80% coverage
+      - *trivy-install-and-run
+      - *sonar-scan
+      - name: Create pre-release tag
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION-beta.$GITHUB_RUN_NUMBER"
+          git tag $TAG
+          git push origin $TAG
+
+  main:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *test-with-coverage
+      - *check-coverage # Enforce 80% coverage
+      - *trivy-install-and-run
+      - *sonar-scan
+      - name: Create release tag and GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION"
+          git tag $TAG
+          git push origin $TAG
+          gh release create $TAG --notes "Production release $TAG"
