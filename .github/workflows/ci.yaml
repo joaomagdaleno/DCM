@@ -16,7 +16,16 @@ x-workflow-steps:
     name: Checkout code
     uses: actions/checkout@v4
     with:
-      fetch-depth: 0  # SonarCloud requires full history
+      fetch-depth: 0  # SonarCloud and Gitleaks require full history
+
+  - &gitleaks-scan
+    name: Scan for secrets
+    uses: gitleaks/gitleaks-action@v2
+    with:
+      # We recommend not failing the workflow on the first run,
+      # to baseline the repository and address existing leaks.
+      # After the initial run, set this to `true`.
+      fail: true
 
   - &flutter-setup
     name: Set up Flutter
@@ -48,20 +57,16 @@ x-workflow-steps:
 
   - &trivy-install-and-run
     name: 'Scan for vulnerabilities with Trivy'
-    # This step is Linux-specific. We will only run it on the ubuntu build.
     if: runner.os == 'Linux'
     run: |
-      sudo apt-get update
-      sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+      sudo apt-get update && sudo apt-get install -y wget apt-transport-https gnupg lsb-release
       wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
       echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-      sudo apt-get update
-      sudo apt-get install -y trivy
+      sudo apt-get update && sudo apt-get install -y trivy
       trivy fs .
 
   - &sonar-scan
     name: SonarCloud Scan
-    # SonarCloud only needs to run once. We will run it on the ubuntu build.
     if: runner.os == 'Linux'
     uses: SonarSource/sonarqube-scan-action@v6
     env:
@@ -74,6 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - *checkout
+      - *gitleaks-scan
       - *flutter-setup
       - *install-deps
       - *analyze
@@ -128,8 +134,7 @@ jobs:
       - *trivy-install-and-run # Will only run on Linux
       - *sonar-scan # Will only run on Linux
       - name: Compile executable
-        run: |
-          dart compile exe bin/dqcm.dart -o dqcm-${{ runner.os }}
+        run: dart compile exe bin/dqcm.dart -o dqcm-${{ runner.os }}
         working-directory: ./dqcm
       - name: Upload artifact
         uses: actions/upload-artifact@v3
