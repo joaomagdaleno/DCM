@@ -2,21 +2,21 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:path/path.dart' as p;
+
 import 'package:dqcm/dqcm.dart';
 
-class AnalyzeCommand extends Command {
+class AnalyzeCommand extends Command<int> {
   @override
-  String get name => 'analyze';
+  final name = 'analyze';
 
   @override
-  String get description => 'Analyze the project for lint issues.';
+  final description = 'Analyze the project for lint issues.';
 
   AnalyzeCommand() {
     argParser.addOption(
       'directory',
       abbr: 'd',
       help: 'The directory to analyze.',
-      defaultsTo: '.',
     );
     argParser.addOption(
       'reporter',
@@ -28,9 +28,13 @@ class AnalyzeCommand extends Command {
   }
 
   @override
-  Future<void> run() async {
-    final directoryPath = argResults!['directory'] as String;
-    final reporterType = argResults!['reporter'] as String;
+  Future<int> run() async {
+    final directoryPath = argResults?['directory'] as String?;
+    if (directoryPath == null) {
+      print('Please provide a directory to analyze with the --directory option.');
+      return 1;
+    }
+    final reporterType = argResults?['reporter'] as String ?? 'console';
     final absolutePath = p.normalize(Directory(directoryPath).absolute.path);
 
     final issues = await analyzeDirectory(absolutePath);
@@ -39,7 +43,9 @@ class AnalyzeCommand extends Command {
     reporter.report(issues);
 
     if (issues.isNotEmpty) {
-      exit(2); // Use a specific exit code for lint issues
+      return 1;
     }
+
+    return 0;
   }
 }
