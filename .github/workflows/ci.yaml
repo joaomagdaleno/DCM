@@ -22,9 +22,6 @@ x-workflow-steps:
     name: Scan for secrets
     uses: gitleaks/gitleaks-action@v2
     with:
-      # We recommend not failing the workflow on the first run,
-      # to baseline the repository and address existing leaks.
-      # After the initial run, set this to `true`.
       fail: true
 
   - &flutter-setup
@@ -43,6 +40,11 @@ x-workflow-steps:
     run: dart run bin/dqcm.dart analyze --directory .
     working-directory: ./dqcm
 
+  - &sca-scan
+    name: Scan for vulnerabilities
+    run: dart run bin/dqcm.dart sca --directory . --reporter=json --fail-on-severity=high
+    working-directory: ./dqcm
+
   - &test-with-coverage
     name: Run tests with coverage
     run: flutter test --coverage
@@ -54,16 +56,6 @@ x-workflow-steps:
     with:
       path: "./dqcm/coverage/lcov.info"
       min_coverage: 80
-
-  - &trivy-install-and-run
-    name: 'Scan for vulnerabilities with Trivy'
-    if: runner.os == 'Linux'
-    run: |
-      sudo apt-get update && sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-      wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-      echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-      sudo apt-get update && sudo apt-get install -y trivy
-      trivy fs .
 
   - &sonar-scan
     name: SonarCloud Scan
@@ -83,8 +75,8 @@ jobs:
       - *flutter-setup
       - *install-deps
       - *analyze
+      - *sca-scan
       - *test-with-coverage
-      - *trivy-install-and-run
       - *sonar-scan
       - name: Create pre-release tag
         if: github.event_name == 'push'
@@ -104,9 +96,9 @@ jobs:
       - *flutter-setup
       - *install-deps
       - *analyze
+      - *sca-scan
       - *test-with-coverage
       - *check-coverage
-      - *trivy-install-and-run
       - *sonar-scan
       - name: Create pre-release tag
         if: github.event_name == 'push'
@@ -129,9 +121,9 @@ jobs:
       - *flutter-setup
       - *install-deps
       - *analyze
+      - *sca-scan
       - *test-with-coverage
       - *check-coverage
-      - *trivy-install-and-run # Will only run on Linux
       - *sonar-scan # Will only run on Linux
       - name: Compile executable
         run: dart compile exe bin/dqcm.dart -o dqcm-${{ runner.os }}
