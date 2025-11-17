@@ -14,7 +14,9 @@ on:
 x-workflow-steps:
   - &checkout
     name: Checkout code
-    uses: actions/checkout@v3
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0  # SonarCloud requires full history
 
   - &flutter-setup
     name: Set up Flutter
@@ -30,11 +32,6 @@ x-workflow-steps:
   - &analyze
     name: Analyze project
     run: dart run bin/dqcm.dart analyze --directory .
-    working-directory: ./dqcm
-
-  - &test
-    name: Run tests
-    run: flutter test
     working-directory: ./dqcm
 
   - &test-with-coverage
@@ -60,6 +57,13 @@ x-workflow-steps:
       sudo apt-get install -y trivy
       trivy fs .
 
+  - &sonar-scan
+    name: SonarCloud Scan
+    uses: SonarSource/sonarqube-scan-action@v6
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: https://sonarcloud.io
+
 jobs:
   dev:
     if: github.ref == 'refs/heads/dev' || github.base_ref == 'dev'
@@ -69,8 +73,9 @@ jobs:
       - *flutter-setup
       - *install-deps
       - *analyze
-      - *test
+      - *test-with-coverage # Enabled coverage for Sonar analysis
       - *trivy-install-and-run
+      - *sonar-scan
       - name: Create pre-release tag
         if: github.event_name == 'push'
         run: |
@@ -90,8 +95,9 @@ jobs:
       - *install-deps
       - *analyze
       - *test-with-coverage
-      - *check-coverage
+      - *check-coverage # Enforce 80% coverage
       - *trivy-install-and-run
+      - *sonar-scan
       - name: Create pre-release tag
         if: github.event_name == 'push'
         run: |
@@ -111,8 +117,9 @@ jobs:
       - *install-deps
       - *analyze
       - *test-with-coverage
-      - *check-coverage
+      - *check-coverage # Enforce 80% coverage
       - *trivy-install-and-run
+      - *sonar-scan
       - name: Create release tag and GitHub Release
         if: github.event_name == 'push'
         env:
