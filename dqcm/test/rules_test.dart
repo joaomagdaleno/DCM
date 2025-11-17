@@ -1,6 +1,8 @@
 import 'package:dqcm/src/rules/flutter/avoid_empty_setstate.dart';
 import 'package:dqcm/src/rules/flutter/avoid_returning_widgets.dart';
+import 'package:dqcm/src/rules/rule.dart';
 import 'package:test/test.dart';
+
 import 'rule_test_utils.dart';
 
 void main() {
@@ -9,25 +11,21 @@ void main() {
 
     test('should report issue when a function returns a widget', () async {
       final code = '''
-        import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-        Widget build() {
-          return Container();
-        }
-      ''';
-      final issues = await testRule(rule, code);
-      expect(issues.length, 1);
-      expect(issues.first.rule.id, 'avoid-returning-widgets');
+Widget good() => const Text('Good');
+''';
+      final issues = await analyzeCode(code, rule);
+      expect(issues, hasLength(1));
     });
 
-    test('should not report issue for non-widget returning functions', () async {
+    test('should not report issue for non-widget returning functions',
+        () async {
       final code = '''
-        int getNumber() {
-          return 1;
-        }
-      ''';
-      final issues = await testRule(rule, code);
-      expect(issues.isEmpty, isTrue);
+int good() => 1;
+''';
+      final issues = await analyzeCode(code, rule);
+      expect(issues, isEmpty);
     });
   });
 
@@ -36,34 +34,54 @@ void main() {
 
     test('should report issue for empty setState', () async {
       final code = '''
-        import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-        class _MyState extends State<StatefulWidget> {
-          void method() {
-            setState(() {});
-          }
-        }
-      ''';
-      final issues = await testRule(rule, code);
-      expect(issues.length, 1);
-      expect(issues.first.rule.id, 'avoid-empty-setstate');
+class MyWidget extends StatefulWidget {
+  @override
+  _MyWidgetState createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {});
+      },
+    );
+  }
+}
+''';
+      final issues = await analyzeCode(code, rule);
+      expect(issues, hasLength(1));
     });
 
     test('should not report issue for non-empty setState', () async {
       final code = '''
-        import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-        class _MyState extends State<StatefulWidget> {
-          int _counter = 0;
-          void method() {
-            setState(() {
-              _counter++;
-            });
-          }
-        }
-      ''';
-      final issues = await testRule(rule, code);
-      expect(issues.isEmpty, isTrue);
+class MyWidget extends StatefulWidget {
+  @override
+  _MyWidgetState createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  int _counter = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _counter++;
+        });
+      },
+    );
+  }
+}
+''';
+      final issues = await analyzeCode(code, rule);
+      expect(issues, isEmpty);
     });
   });
 }

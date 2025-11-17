@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:args/command_runner.dart';
 import 'package:path/path.dart' as p;
 
@@ -22,7 +23,7 @@ class AnalyzeCommand extends Command<int> {
       'reporter',
       abbr: 'r',
       help: 'The format to output results in.',
-      allowed: ['console', 'json'],
+      allowed: ['console', 'json', 'html'],
       defaultsTo: 'console',
     );
   }
@@ -37,7 +38,10 @@ class AnalyzeCommand extends Command<int> {
     final reporterType = argResults?['reporter'] as String ?? 'console';
     final absolutePath = p.normalize(Directory(directoryPath).absolute.path);
 
-    final issues = await analyzeDirectory(absolutePath);
+    final issues = await analyzeDirectory(
+      absolutePath,
+      resourceProvider: PhysicalResourceProvider.INSTANCE,
+    );
 
     final reporter = getReporter(reporterType);
     reporter.report(issues);
