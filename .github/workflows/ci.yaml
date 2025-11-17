@@ -1,0 +1,157 @@
+name: Dart Quality Control Metrics CI
+
+on:
+  push:
+    branches:
+      - dev
+      - beta
+      - main
+  pull_request:
+    branches:
+      - dev
+
+# Reusable step definitions using YAML anchors
+x-workflow-steps:
+  - &checkout
+    name: Checkout code
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0  # SonarCloud and Gitleaks require full history
+
+  - &gitleaks-scan
+    name: Scan for secrets
+    uses: gitleaks/gitleaks-action@v2
+    with:
+      fail: true
+
+  - &flutter-setup
+    name: Set up Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      channel: 'stable'
+
+  - &install-deps
+    name: Install dependencies
+    run: flutter pub get
+    working-directory: ./dqcm
+
+  - &analyze
+    name: Analyze project
+    run: dart run bin/dqcm.dart analyze --directory .
+    working-directory: ./dqcm
+
+  - &sca-scan
+    name: Scan for vulnerabilities
+    run: dart run bin/dqcm.dart sca --directory . --reporter=json --fail-on-severity=high
+    working-directory: ./dqcm
+
+  - &test-with-coverage
+    name: Run tests with coverage
+    run: flutter test --coverage
+    working-directory: ./dqcm
+
+  - &check-coverage
+    name: Check code coverage
+    uses: VeryGoodOpenSource/very_good_coverage@v2
+    with:
+      path: "./dqcm/coverage/lcov.info"
+      min_coverage: 80
+
+  - &sonar-scan
+    name: SonarCloud Scan
+    if: runner.os == 'Linux'
+    uses: SonarSource/sonarqube-scan-action@v6
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: https://sonarcloud.io
+
+jobs:
+  dev:
+    if: github.ref == 'refs/heads/dev' || github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *gitleaks-scan
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *sca-scan
+      - *test-with-coverage
+      - *sonar-scan
+      - name: Create pre-release tag
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION-dev.$GITHUB_RUN_NUMBER"
+          git tag $TAG
+          git push origin $TAG
+
+  beta:
+    if: github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *sca-scan
+      - *test-with-coverage
+      - *check-coverage
+      - *sonar-scan
+      - name: Create pre-release tag
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION-beta.$GITHUB_RUN_NUMBER"
+          git tag $TAG
+          git push origin $TAG
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - *checkout
+      - *flutter-setup
+      - *install-deps
+      - *analyze
+      - *sca-scan
+      - *test-with-coverage
+      - *check-coverage
+      - *sonar-scan # Will only run on Linux
+      - name: Compile executable
+        run: dart compile exe bin/dqcm.dart -o dqcm-${{ runner.os }}
+        working-directory: ./dqcm
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dqcm-${{ runner.os }}
+          path: dqcm/dqcm-${{ runner.os }}
+
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: Create release tag and GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          VERSION=$(grep 'version:' dqcm/pubspec.yaml | sed 's/version: //')
+          TAG="v$VERSION"
+          git tag $TAG
+          git push origin $TAG
+          gh release create $TAG --notes "Production release $TAG" artifacts/*/*
