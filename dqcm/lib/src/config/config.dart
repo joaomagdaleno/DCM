@@ -1,14 +1,15 @@
-import 'dart:io';
+import 'package:analyzer/file_system/file_system.dart';
 import 'package:yaml/yaml.dart';
 
 class Config {
   final List<String> enabledRules;
+  final Map<String, int> ruleThresholds;
 
-  Config(this.enabledRules);
+  Config(this.enabledRules, this.ruleThresholds);
 
   factory Config.fromAnalysisOptions(File optionsFile) {
-    if (!optionsFile.existsSync()) {
-      return Config([]);
+    if (!optionsFile.exists) {
+      return Config([], {});
     }
 
     final content = optionsFile.readAsStringSync();
@@ -16,14 +17,29 @@ class Config {
 
     final dqcmConfig = yaml?['dqcm'] as YamlMap?;
     if (dqcmConfig == null) {
-      return Config([]);
+      return Config([], {});
     }
 
-    final rules = dqcmConfig['rules'] as YamlList?;
+    final rules = dqcmConfig['rules'] as YamlMap?;
     if (rules == null) {
-      return Config([]);
+      return Config([], {});
     }
 
-    return Config(rules.cast<String>().toList());
+    final enabledRules = <String>[];
+    final ruleThresholds = <String, int>{};
+
+    rules.forEach((key, value) {
+      if (value is bool && value) {
+        enabledRules.add(key as String);
+      } else if (value is YamlMap) {
+        enabledRules.add(key as String);
+        final threshold = value['threshold'] as int?;
+        if (threshold != null) {
+          ruleThresholds[key as String] = threshold;
+        }
+      }
+    });
+
+    return Config(enabledRules, ruleThresholds);
   }
 }
