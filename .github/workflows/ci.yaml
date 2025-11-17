@@ -48,6 +48,8 @@ x-workflow-steps:
 
   - &trivy-install-and-run
     name: 'Scan for vulnerabilities with Trivy'
+    # This step is Linux-specific. We will only run it on the ubuntu build.
+    if: runner.os == 'Linux'
     run: |
       sudo apt-get update
       sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -59,6 +61,8 @@ x-workflow-steps:
 
   - &sonar-scan
     name: SonarCloud Scan
+    # SonarCloud only needs to run once. We will run it on the ubuntu build.
+    if: runner.os == 'Linux'
     uses: SonarSource/sonarqube-scan-action@v6
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -73,7 +77,7 @@ jobs:
       - *flutter-setup
       - *install-deps
       - *analyze
-      - *test-with-coverage # Enabled coverage for Sonar analysis
+      - *test-with-coverage
       - *trivy-install-and-run
       - *sonar-scan
       - name: Create pre-release tag
@@ -95,7 +99,7 @@ jobs:
       - *install-deps
       - *analyze
       - *test-with-coverage
-      - *check-coverage # Enforce 80% coverage
+      - *check-coverage
       - *trivy-install-and-run
       - *sonar-scan
       - name: Create pre-release tag
@@ -108,20 +112,42 @@ jobs:
           git tag $TAG
           git push origin $TAG
 
-  main:
+  build:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - *checkout
       - *flutter-setup
       - *install-deps
       - *analyze
       - *test-with-coverage
-      - *check-coverage # Enforce 80% coverage
-      - *trivy-install-and-run
-      - *sonar-scan
+      - *check-coverage
+      - *trivy-install-and-run # Will only run on Linux
+      - *sonar-scan # Will only run on Linux
+      - name: Compile executable
+        run: |
+          dart compile exe bin/dqcm.dart -o dqcm-${{ runner.os }}
+        working-directory: ./dqcm
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dqcm-${{ runner.os }}
+          path: dqcm/dqcm-${{ runner.os }}
+
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
       - name: Create release tag and GitHub Release
-        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -131,4 +157,4 @@ jobs:
           TAG="v$VERSION"
           git tag $TAG
           git push origin $TAG
-          gh release create $TAG --notes "Production release $TAG"
+          gh release create $TAG --notes "Production release $TAG" artifacts/*/*
